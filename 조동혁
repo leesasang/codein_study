@@ -1,1 +1,67 @@
+import sys
+import os
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox)
 
+class MoneyApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('David의 용돈기입장 1.0')
+        self.setGeometry(300, 300, 400, 200)
+
+        layout = QVBoxLayout()
+
+        # 입력칸들
+        self.date_edit = QLineEdit()
+        self.date_edit.setPlaceholderText('날짜 (예: 2026-03-22)')
+        
+        self.desc_edit = QLineEdit()
+        self.desc_edit.setPlaceholderText('내용 (예: 편의점 점심)')
+        
+        self.amount_edit = QLineEdit()
+        self.amount_edit.setPlaceholderText('금액 (예: 5000)')
+
+        layout.addWidget(QLabel('📅 날짜:'))
+        layout.addWidget(self.date_edit)
+        layout.addWidget(QLabel('📝 내용:'))
+        layout.addWidget(self.desc_edit)
+        layout.addWidget(QLabel('💰 금액:'))
+        layout.addWidget(self.amount_edit)
+
+        # 저장 버튼
+        save_btn = QPushButton('💾 저장하기')
+        save_btn.clicked.connect(self.save_data)
+        layout.addWidget(save_btn)
+
+        self.setLayout(layout)
+
+    def save_data(self):
+        date = self.date_edit.text()
+        desc = self.desc_edit.text()
+        amount = self.amount_edit.text()
+
+        if date and desc and amount:
+            # 바탕화면에 'money_log.txt' 파일로 저장합니다.
+          import os
+# '홈 폴더'를 자동으로 찾아서 그 안의 'Desktop' 폴더에 저장하게 합니다.
+file_path = os.path.join(os.path.expanduser("~"), "Desktop", "money_log.txt")
+            with open(file_path, "a", encoding="utf-8") as f:
+                f.write(f"{date} | {desc} | {amount}원\n")
+            
+            QMessageBox.information(self, '성공', f'"{desc}" 기록 완료!\n바탕화면의 money_log.txt를 확인하세요.')
+            
+            # 입력칸 비우기
+            self.date_edit.clear()
+            self.desc_edit.clear()
+            self.amount_edit.clear()
+        else:
+            QMessageBox.warning(self, '알림', '모든 칸을 채워주세요!')
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = MoneyApp()
+    ex.show()
+    sys.exit(app.exec())
