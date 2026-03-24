@@ -1,1 +1,5 @@
-.
+date = int(input('Please enter the date(yyyymmdd)>>>')
+year = date[0:3]
+month = date[3:5]
+day = date[5:7]
+print(year, month, day)
