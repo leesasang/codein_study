@@ -1,5 +1,66 @@
-date = int(input('Please enter the date(yyyymmdd)>>>')
-year = date[0:3]
-month = date[3:5]
-day = date[5:7]
-print(year, month, day)
+pip install astropy
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import astropy.units as u
+from astropy.time import Time
+from astropy.coordinates import EarthLocation, AltAz, get_body
+
+# =========================
+# 관측 위치 설정
+# =========================
+LATITUDE_DEG = 37.5665
+LONGITUDE_DEG = 126.9780
+HEIGHT_M = 38
+
+# =========================
+# 날짜 입력
+# =========================
+year = int(input("년도 입력: "))
+month = int(input("월 입력: "))
+day = int(input("일 입력: "))
+
+# 한국 시간 자정 (00:00:00, Asia/Seoul)
+kst = ZoneInfo("Asia/Seoul")
+local_midnight = datetime(year, month, day, 0, 0, 0, tzinfo=kst)
+
+# astropy Time 객체로 변환
+# astropy는 timezone-aware datetime도 처리할 수 있다.
+obs_time = Time(local_midnight)
+
+# 관측자 위치
+location = EarthLocation(
+    lat=LATITUDE_DEG * u.deg,
+    lon=LONGITUDE_DEG * u.deg,
+    height=HEIGHT_M * u.m
+)
+
+# 달의 좌표
+# get_body("moon")은 현재 astropy에서 권장되는 방식
+moon = get_body("moon", obs_time, location)
+
+# 적경/적위 (RA/Dec)
+ra = moon.ra
+dec = moon.dec
+
+# 방위각/고도 (Az/Alt)
+altaz_frame = AltAz(obstime=obs_time, location=location)
+moon_altaz = moon.transform_to(altaz_frame)
+
+az = moon_altaz.az
+alt = moon_altaz.alt
+
+# =========================
+# 출력
+# =========================
+print("\n[관측 정보]")
+print(f"관측 시각(KST): {local_midnight.isoformat()}")
+print(f"관측 위치: 위도 {LATITUDE_DEG}°, 경도 {LONGITUDE_DEG}°, 고도 {HEIGHT_M} m")
+
+print("\n[달의 좌표]")
+print(f"적경 (RA):  {ra.to_string(unit=u.hour, sep=':')}")
+print(f"적위 (Dec): {dec.to_string(unit=u.deg, sep=':')}")
+print(f"방위각 (Az): {az.deg:.6f} deg")
+print(f"고도 (Alt): {alt.deg:.6f} deg")
+
