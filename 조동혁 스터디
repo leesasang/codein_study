@@ -1,1 +1,94 @@
+###tenet 
 
+s= input ("문장을 입력하세요:")     #입력한 값에 대해 s라 칭하자
+
+w= s.split()                        #s를 하나 하나 쪼개서 그것을 w라 칭하자 
+
+b=[]                                #basket 약자 b
+
+for w in w:                         #w안에있는것을 모조리 꺼내서 w라 하고 반복한다
+    left = 0                        #글자 가장 왼쪽을 0 가장 오른쪽을 -1 이라 칭한다
+    right = -1                      
+    b1= True                        #b1이 true 라 하자
+
+    while left< len(w) // 2:        #w의 문자 길이 중 왼쪽이 w절반에 닿기 전까지
+        if w[left] != w[right]:     #만약 w내부 왼쪽과 w오른쪽이 같지 않다면 
+            b1= False               #b1은 거짓이다.
+            break                   #멈춰라
+
+        left +=1                    #왼쪽에서 오른쪽으로 한칸씩 이동하자
+        right -= 1                  #오른쪽에서 왼쪽으로 한칸씩 이동하자
+
+    if b1 == True:                  #만약 b1이 진실 이라면
+        b.append(w)                 #그 w값에 대해 출력하려는 바구니(b)에 추가하라
+
+
+print("결과:", *b)                 #결과: 하고 b에 있는것을 출력하라 *b는 리스트 내부의 값만 출력하기 
+
+
+
+### 모음 추출기 
+
+x=input("모음만 추출할게")         #모음만 추출할게
+
+result=""                           #결과값이라는 바구니 만들게
+
+for c in x:                         #x내부값에 대해 임시 작업장을 c라고 정의하자 
+    if c=='a':
+        result = result+c           #c가 조건문 확인하러 간다 a, e, i, o, u 일경우 result바구니에 c값을 추가한다
+
+    elif c=='e':
+         result = result+c
+
+    elif c=='i':
+         result = result+c
+
+    elif c=='o':
+         result = result+c
+
+    elif c=='u':
+         result = result+c
+
+    else: pass                      #아닐 경우 넘겨버려라 
+
+
+print(f"{result}")                  #result 에 대해 출력하라 
+
+
+###문자열 뒤집기 
+
+x=input("뒤집을 단어를 입력하세요") #x받을게
+
+b1= "".join(reversed(x))            #b1에서 x에 대해서 뒤집은 값을 쭉써보자
+
+
+print(f"{b1}")                    #b1결과값 출력할게 
+
+
+###아이디 비번 
+
+x=input("아이디를 입력하세요")           #아이디 받은거 x
+
+
+y=input("비밀번호를 입력하세요")          #비밀번호 받은거 y
+
+b2= "*" * len(y)                            #바구니 2라 하고 y글자수를 len(y)라 지정, ㅣ* *해서 글자수만큼 *개수 출력
+
+print(f"{x}, {"". join(b2)}")                      #x, b2값을 출력해라 
+        
+###별 늘였다가 줄이기 중간에 포기함 
+
+x= input("별 개수를 입력하세요")
+
+
+for i in range(1,x+1):
+    for j in range(i):
+        print("*", end="")
+
+
+for i in range
+
+
+
+
+    print()
