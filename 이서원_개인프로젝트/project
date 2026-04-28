@@ -1,1 +1,36 @@
+1차 탐색: 일 단위 데이터 수집 중...
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+/tmp/ipykernel_675/1127348162.py in <cell line: 0>()
+    259 planets = ["지구", "천왕성", "목성", "화성"]
+    260 
+--> 261 result = find_closest_alignment(
+    262     planets,
+    263     start="2026-01-01",
 
+1 frames
+/tmp/ipykernel_675/1127348162.py in find_closest_alignment(input_planets, start, years)
+    165 
+    166     for planet in input_planets:
+--> 167         df = fetch_ra_from_horizons(
+    168             planet,
+    169             start_time=start_str,
+
+/tmp/ipykernel_675/1127348162.py in fetch_ra_from_horizons(planet_name, start_time, stop_time, step_size)
+     70 
+     71     if "$$SOE" not in text or "$$EOE" not in text:
+---> 72         raise ValueError(f"{planet_name} 데이터를 읽지 못했습니다.\n{text[:1000]}")
+     73 
+     74     table_text = text.split("$$SOE")[1].split("$$EOE")[0].strip()
+
+ValueError: 지구 데이터를 읽지 못했습니다.
+API VERSION: 1.2
+API SOURCE: NASA/JPL Horizons API
+
+
+ INPUT ERROR in VLADD  in following line:
+ STEP_SIZE=1 D
+             ^  Too many constants
+BATVAR: problem loading execution-control setting:
+LINE=STEP_SIZE=1 D
+WLDINI: error loading execution-control file.
