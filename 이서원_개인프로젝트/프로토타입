@@ -1,0 +1,143 @@
+import requests
+import pandas as pd
+from io import StringIO
+
+# =========================
+# 기본 설정
+# =========================
+
+HORIZONS_API_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
+
+PLANET_INFO = {
+    "수성": {"id": "199", "period": 87.969},
+    "금성": {"id": "299", "period": 224.701},
+    "지구": {"id": "399", "period": 365.256},
+    "화성": {"id": "499", "period": 686.980},
+    "목성": {"id": "599", "period": 4332.589},
+    "토성": {"id": "699", "period": 10759.22},
+    "천왕성": {"id": "799", "period": 30685.4},
+    "해왕성": {"id": "899", "period": 60189.0},
+}
+
+
+# =========================
+# 회합주기 계산
+# =========================
+
+def calculate_synodic_period(planet1, planet2):
+    p1 = PLANET_INFO[planet1]["period"]
+    p2 = PLANET_INFO[planet2]["period"]
+
+    synodic_period = 1 / abs((1 / p1) - (1 / p2))
+
+    return synodic_period
+
+
+# =========================
+# NASA/JPL Horizons API에서 적경 받기
+# =========================
+
+def get_planet_ra(planet_name, start_time, stop_time, step_size="1 d"):
+    planet_id = PLANET_INFO[planet_name]["id"]
+
+    params = {
+        "format": "text",
+        "COMMAND": f"'{planet_id}'",
+        "OBJ_DATA": "'NO'",
+        "MAKE_EPHEM": "'YES'",
+        "EPHEM_TYPE": "'OBSERVER'",
+        "CENTER": "'500@10'",        # 태양 중심 기준
+        "START_TIME": f"'{start_time}'",
+        "STOP_TIME": f"'{stop_time}'",
+        "STEP_SIZE": f"'{step_size}'",
+        "QUANTITIES": "'1'",         # RA, DEC
+        "CSV_FORMAT": "'YES'",
+        "ANG_FORMAT": "'DEG'",
+    }
+
+    response = requests.get(HORIZONS_API_URL, params=params)
+    response.raise_for_status()
+
+    text = response.text
+
+    if "$$SOE" not in text or "$$EOE" not in text:
+        print(text[:2000])
+        raise ValueError("데이터를 찾지 못했습니다.")
+
+    data_text = text.split("$$SOE")[1].split("$$EOE")[0].strip()
+
+    raw_table = pd.read_csv(StringIO(data_text), header=None)
+
+    # 보통 0열: 날짜, 2열: RA, 3열: DEC
+    ra_table = raw_table[[0, 2, 3]].copy()
+    ra_table.columns = ["datetime", f"{planet_name}_RA_deg", f"{planet_name}_DEC_deg"]
+
+    ra_table["datetime"] = pd.to_datetime(
+        ra_table["datetime"].astype(str).str.strip(),
+        errors="coerce"
+    )
+
+    ra_table[f"{planet_name}_RA_deg"] = pd.to_numeric(
+        ra_table[f"{planet_name}_RA_deg"],
+        errors="coerce"
+    )
+
+    ra_table[f"{planet_name}_DEC_deg"] = pd.to_numeric(
+        ra_table[f"{planet_name}_DEC_deg"],
+        errors="coerce"
+    )
+
+    return ra_table.dropna()
+
+
+# =========================
+# 두 행성 결과 출력
+# =========================
+
+def compare_two_planets(planet1, planet2, start_time, stop_time, step_size="1 d"):
+    planet1_ra_table = get_planet_ra(
+        planet_name=planet1,
+        start_time=start_time,
+        stop_time=stop_time,
+        step_size=step_size
+    )
+
+    planet2_ra_table = get_planet_ra(
+        planet_name=planet2,
+        start_time=start_time,
+        stop_time=stop_time,
+        step_size=step_size
+    )
+
+    combined_table = pd.merge(
+        planet1_ra_table[["datetime", f"{planet1}_RA_deg"]],
+        planet2_ra_table[["datetime", f"{planet2}_RA_deg"]],
+        on="datetime",
+        how="inner"
+    )
+
+    synodic_period = calculate_synodic_period(planet1, planet2)
+
+    print("===== 결과 =====")
+    print("행성 1:", planet1)
+    print("행성 2:", planet2)
+    print("회합주기:", round(synodic_period, 2), "일")
+    print()
+
+    print("===== 적경 데이터 =====")
+    display(combined_table)
+
+    return combined_table, synodic_period
+
+
+# =========================
+# 실행 예시
+# =========================
+
+result_table, synodic = compare_two_planets(
+    planet1="지구",
+    planet2="화성",
+    start_time="2026-Jan-01",
+    stop_time="2026-Jan-10",
+    step_size="1 d"
+)
