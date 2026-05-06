@@ -1,0 +1,187 @@
+import sys        #26.05.06 두번째 타입 
+import os
+
+# 1. DLL 및 환경 변수 설정
+os.environ["PATH"] = sys.prefix + os.pathsep + os.environ["PATH"]
+os.environ["QT_API"] = "pyside6"
+
+# 2. Matplotlib 한글 폰트 및 설정
+import matplotlib
+from matplotlib import font_manager, rc
+
+font_path = "C:/Windows/Fonts/malgun.ttf"
+if os.path.exists(font_path):
+    font_name = font_manager.FontProperties(fname=font_path).get_name()
+    matplotlib.rc('font', family=font_name)
+
+matplotlib.rcParams['axes.unicode_minus'] = False
+matplotlib.use('qtagg') 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+
+# 데이터 처리를 위한 판다스
+import pandas as pd
+
+from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLineEdit, QPushButton, QLabel, 
+                             QMessageBox, QToolBar)
+from PySide6.QtGui import QAction
+
+class MoneyApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.current_mode = "용돈"
+        self.data = {"용돈": [], "창고": [], "차량": []}
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('David의 멀티 스마트 관리 시스템 2.0')
+        self.setGeometry(200, 200, 1000, 700)
+
+        # 1. 툴바 설정
+        toolbar = QToolBar("메인 툴바")
+        self.addToolBar(toolbar)
+
+        money_act = QAction("💰 용돈기입장", self)
+        money_act.triggered.connect(lambda: self.switch_mode("용돈"))
+        toolbar.addAction(money_act)
+
+        stock_act = QAction("📦 창고관리", self)
+        stock_act.triggered.connect(lambda: self.switch_mode("창고"))
+        toolbar.addAction(stock_act)
+
+        car_act = QAction("🚗 차량입출", self)
+        car_act.triggered.connect(lambda: self.switch_mode("차량"))
+        toolbar.addAction(car_act)
+
+        # 2. 메인 레이아웃 구성
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+
+
+        # --- 왼쪽: 입력 영역 ---
+        left_layout = QVBoxLayout()
+        
+        # [추가] 위젯들 사이의 수직 간격을 5픽셀로 좁혀서 버튼이 올라오게 함
+        left_layout.setSpacing(5) 
+        # [추가] 레이아웃 외곽 여백을 줄임 (상, 하, 좌, 우)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+
+        self.mode_label = QLabel(f"현재 모드: 【 {self.current_mode} 】")
+        # ... (이하 동일)
+        self.mode_label = QLabel(f"현재 모드: 【 {self.current_mode} 】")
+        self.mode_label.setStyleSheet("font-weight: bold; color: blue; font-size: 15px;")
+        
+        self.label1 = QLabel("날짜:")
+        self.edit1 = QLineEdit()
+        self.label2 = QLabel("내용:")
+        self.edit2 = QLineEdit()
+        self.label3 = QLabel("금액/수량:")
+        self.edit3 = QLineEdit()
+
+        left_layout.addWidget(self.mode_label)
+        left_layout.addWidget(self.label1); left_layout.addWidget(self.edit1)
+        left_layout.addWidget(self.label2); left_layout.addWidget(self.edit2)
+        left_layout.addWidget(self.label3); left_layout.addWidget(self.edit3)
+
+        save_btn = QPushButton('💾 데이터 기록 및 분석')
+        save_btn.clicked.connect(self.save_data)
+        left_layout.addWidget(save_btn)
+
+        export_btn = QPushButton('📊 엑셀로 내보내기 (Export)')
+        export_btn.clicked.connect(self.export_to_excel)
+        left_layout.addWidget(export_btn)
+        
+        left_layout.addStretch()
+
+        # --- 오른쪽: 그래프 영역 ---
+        self.figure, self.ax = plt.subplots()
+        self.canvas = FigureCanvas(self.figure)
+        
+        main_layout.addLayout(left_layout, stretch=1)
+        main_layout.addWidget(self.canvas, stretch=2)
+
+    def switch_mode(self, mode):
+        self.current_mode = mode
+        self.mode_label.setText(f"현재 모드: 【 {mode} 】")
+        
+        if mode == "용돈":
+            self.label2.setText("내용 (지출처):")
+            self.label3.setText("금액 (원):")
+        elif mode == "창고":
+            self.label2.setText("품목명:")
+            self.label3.setText("입고 수량:")
+        elif mode == "차량":
+            self.label2.setText("차량번호:")
+            self.label3.setText("입차 시각 (숫자):")
+        
+        self.update_plot()
+
+    def save_data(self):
+        v1, v2, v3 = self.edit1.text(), self.edit2.text(), self.edit3.text()
+        if v1 and v2 and v3:
+            try:
+                val = float(v3)
+                self.data[self.current_mode].append((v2, val))
+                self.update_plot()
+                self.edit2.clear(); self.edit3.clear()
+            except ValueError:
+                QMessageBox.warning(self, "에러", "수치는 숫자만 입력하세요.")
+        else:
+            QMessageBox.warning(self, "알림", "모든 칸을 채워주세요.")
+
+    def update_plot(self):
+        self.ax.clear()
+        current_list = self.data[self.current_mode]
+        
+        if not current_list:
+            if self.current_mode == "용돈":
+                self.ax.set_ylim(0, 20000)
+                self.ax.set_yticks(range(0, 21000, 1000))
+            self.canvas.draw()
+            return
+
+        names = [x[0] for x in current_list]
+        values = [x[1] for x in current_list]
+
+        if self.current_mode == "용돈":
+            self.ax.scatter(range(len(values)), values, color='blue', s=100, zorder=3)
+            self.ax.set_title("용돈 지출 현황 (Max 20,000)")
+            self.ax.set_ylim(0, 20000)
+            ticks = range(0, 21000, 1000)
+            self.ax.set_yticks(ticks)
+            self.ax.set_yticklabels([f"{x:,}" for x in ticks])
+
+        elif self.current_mode == "창고":
+            self.ax.bar(names, values, color='orange')
+            self.ax.set_title("창고 재고 현황")
+        
+        elif self.current_mode == "차량":
+            self.ax.plot(values, marker='o', color='green')
+            self.ax.set_title("차량 입출 기록")
+
+        self.ax.grid(True, alpha=0.3)
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+    def export_to_excel(self):
+        if not self.data[self.current_mode]:
+            QMessageBox.warning(self, "알림", "내보낼 데이터가 없습니다.")
+            return
+        try:
+            df = pd.DataFrame(self.data[self.current_mode], columns=['항목/내용', '수치'])
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            file_path = os.path.join(desktop, f"David_{self.current_mode}_데이터.xlsx")
+            df.to_excel(file_path, index=False)
+            QMessageBox.information(self, "성공", f"엑셀 파일이 바탕화면에 저장되었습니다!")
+            os.startfile(desktop)
+        except Exception as e:
+            QMessageBox.critical(self, "에러", f"엑셀 저장 중 오류: {str(e)}")
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = MoneyApp()
+    window.show()
+    sys.exit(app.exec())
