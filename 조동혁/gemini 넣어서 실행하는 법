@@ -1,0 +1,10 @@
+https://aistudio.google.com/api-keys?project=gen-lang-client-0845955177 여기 접속
+왼쪽 get api key 
+create api key 
+cmd 관리자 모드 켜기 
+pip install google-genai ---cmd에 입력 
+setx GEMINI_API_KEY "발급받은_실제_Gemini_API_키" /M ---cmd 입력
+cmd vscode 모두 종료 후 
+  echo %GEMINI_API_KEY% 입력하기 
+화면에 방금 등록한 AIzaSy...로 시작하는 본인의 API 키가 그대로 출력된다면 성공적으로 등록된 것
+이후 프로그램 실행하기 
