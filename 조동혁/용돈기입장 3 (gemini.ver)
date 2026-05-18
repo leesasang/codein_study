@@ -1,0 +1,331 @@
+import sys
+import os
+from datetime import datetime
+
+# 1. DLL 및 환경 변수 설정
+os.environ["PATH"] = sys.prefix + os.pathsep + os.environ["PATH"]
+os.environ["QT_API"] = "pyside6"
+
+import matplotlib
+from matplotlib import font_manager, rc
+
+# 2. Matplotlib 한글 폰트 설정
+font_path = "C:/Windows/Fonts/malgun.ttf"
+if os.path.exists(font_path):
+    font_name = font_manager.FontProperties(fname=font_path).get_name()
+    matplotlib.rc('font', family=font_name)
+
+matplotlib.rcParams['axes.unicode_minus'] = False
+matplotlib.use('qtagg') 
+
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+import pandas as pd
+
+# 3. Gemini API SDK 임포트 (google-genai)
+try:
+    from google import genai
+    from google.genai import types
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
+
+from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLineEdit, QPushButton, QLabel, 
+                             QMessageBox, QToolBar, QFileDialog)
+from PySide6.QtGui import QAction
+
+class MoneyApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.current_mode = "용돈"
+        self.data = {"용돈": [], "창고": [], "차량": []}
+        self.selected_image_path = "" # 선택된 이미지 경로 저장용
+        
+        # Gemini 클라이언트 초기화 (환경변수의 GEMINI_API_KEY를 자동으로 로드)
+        if HAS_GEMINI:
+            try:
+                self.ai_client = genai.Client()
+            except Exception:
+                self.ai_client = None
+        else:
+            self.ai_client = None
+
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('David의 멀티 스마트 관리 시스템 3.0 (AI Vision)')
+        self.setGeometry(200, 200, 1100, 750)
+
+        # 1. 툴바 설정
+        toolbar = QToolBar("메인 툴바")
+        self.addToolBar(toolbar)
+
+        money_act = QAction("💰 용돈기입장", self)
+        money_act.triggered.connect(lambda: self.switch_mode("용돈"))
+        toolbar.addAction(money_act)
+
+        stock_act = QAction("📦 창고관리", self)
+        stock_act.triggered.connect(lambda: self.switch_mode("창고"))
+        toolbar.addAction(stock_act)
+
+        car_act = QAction("🚗 차량입출", self)
+        car_act.triggered.connect(lambda: self.switch_mode("차량"))
+        toolbar.addAction(car_act)
+
+        # 2. 메인 레이아웃 구성
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+
+        # --- 왼쪽: 입력 및 AI 영역 ---
+        left_layout = QVBoxLayout()
+        left_layout.setSpacing(8) 
+        left_layout.setContentsMargins(15, 15, 15, 15)
+
+        self.mode_label = QLabel(f"현재 모드: 【 {self.current_mode} 】")
+        self.mode_label.setStyleSheet("font-weight: bold; color: #2e86de; font-size: 16px; margin-bottom: 5px;")
+        
+        # --- [추가] AI 사진 인식 섹션 ---
+        ai_group_label = QLabel("🤖 Gemini AI 사진 인식 입력")
+        ai_group_label.setStyleSheet("font-weight: bold; color: #8e44ad; font-size: 13px; margin-top: 5px;")
+        
+        self.btn_select_img = QPushButton("📸 이미지 파일 선택...")
+        self.btn_select_img.clicked.connect(self.select_image)
+        
+        self.lbl_img_status = QLabel("선택된 사진 없음")
+        self.lbl_img_status.setStyleSheet("color: gray; font-style: italic;")
+        
+        self.btn_run_ai = QPushButton("⚡ AI 이미지 분석 및 자동 입력")
+        self.btn_run_ai.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold;")
+        self.btn_run_ai.clicked.connect(self.analyze_image_with_gemini)
+        
+        # 기존 수동 입력 필드들
+        self.label1 = QLabel("날짜:")
+        self.edit1 = QLineEdit()
+        self.edit1.setText(datetime.now().strftime("%Y-%m-%d")) # 기본적으로 오늘 날짜 세팅
+        
+        self.label2 = QLabel("내용 (지출처):")
+        self.edit2 = QLineEdit()
+        
+        self.label3 = QLabel("금액 (원):")
+        self.edit3 = QLineEdit()
+
+        # 레이아웃에 배치 (AI 섹션을 상단에 배치하여 플로우 유도)
+        left_layout.addWidget(self.mode_label)
+        left_layout.addWidget(ai_group_label)
+        left_layout.addWidget(self.btn_select_img)
+        left_layout.addWidget(self.lbl_img_status)
+        left_layout.addWidget(self.btn_run_ai)
+        
+        # 구분선 역할의 마진
+        left_layout.addSpacing(10) 
+        
+        left_layout.addWidget(self.label1); left_layout.addWidget(self.edit1)
+        left_layout.addWidget(self.label2); left_layout.addWidget(self.edit2)
+        left_layout.addWidget(self.label3); left_layout.addWidget(self.edit3)
+
+        save_btn = QPushButton('💾 데이터 기록 및 분석')
+        save_btn.setFixedHeight(40)
+        save_btn.setStyleSheet("background-color: #34495e; color: white; font-weight: bold;")
+        save_btn.clicked.connect(self.save_data)
+        left_layout.addWidget(save_btn)
+
+        export_btn = QPushButton('📊 엑셀로 내보내기 (Export)')
+        export_btn.setFixedHeight(40)
+        export_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
+        export_btn.clicked.connect(self.export_to_excel)
+        left_layout.addWidget(export_btn)
+        
+        left_layout.addStretch()
+
+        # --- 오른쪽: 그래프 영역 ---
+        self.figure, self.ax = plt.subplots()
+        self.canvas = FigureCanvas(self.figure)
+        
+        main_layout.addLayout(left_layout, stretch=1)
+        main_layout.addWidget(self.canvas, stretch=2.5)
+
+        self.update_plot()
+
+    def switch_mode(self, mode):
+        self.current_mode = mode
+        self.mode_label.setText(f"현재 모드: 【 {mode} 】")
+        
+        if mode == "용돈":
+            self.label2.setText("내용 (지출처):")
+            self.label3.setText("금액 (원):")
+        elif mode == "창고":
+            self.label2.setText("품목명:")
+            self.label3.setText("입고 수량:")
+        elif mode == "차량":
+            self.label2.setText("차량번호:")
+            self.label3.setText("입차 시각 (숫자):")
+        
+        self.edit2.clear()
+        self.edit3.clear()
+        self.update_plot()
+
+    # [AI 기능] 이미지 파일 열기 다이얼로그
+    def select_image(self):
+        file_filter = "이미지 파일 (*.png *.jpg *.jpeg *.bmp)"
+        file_path, _ = QFileDialog.getOpenFileName(self, "분석할 이미지 선택", "", file_filter)
+        if file_path:
+            self.selected_image_path = file_path
+            # 파일명만 추출해서 라벨에 표시
+            self.lbl_img_status.setText(os.path.basename(file_path))
+
+    # [AI 기능] Gemini 2.5 Flash 모델 연동 비전 분석
+    def analyze_image_with_gemini(self):
+        if not HAS_GEMINI:
+            QMessageBox.critical(self, "라이브러리 누락", "google-genai 라이브러리가 설치되지 않았습니다.\npip install google-genai 를 실행하세요.")
+            return
+        
+        if not self.selected_image_path:
+            QMessageBox.warning(self, "알림", "먼저 분석할 이미지 파일을 선택해 주세요.")
+            return
+
+        if not self.ai_client:
+            QMessageBox.critical(self, "인증 에러", "Gemini API 키가 설정되지 않았거나 클라이언트 생성에 실패했습니다.\n환경변수(GEMINI_API_KEY)를 확인하세요.")
+            return
+
+        self.btn_run_ai.setText("⏳ AI 분석 중... 잠시만 기다려주세요")
+        self.btn_run_ai.setEnabled(False)
+        QApplication.processEvents() # UI가 멈추지 않도록 강제 리프레시
+
+        try:
+            # 1. 파일 데이터 로드 및 미디어타입 매핑
+            with open(self.selected_image_path, "rb") as f:
+                image_bytes = f.read()
+            
+            ext = os.path.splitext(self.selected_image_path)[-1].lower()
+            mime_type = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"
+            
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+            # 2. 현재 모드에 맞춘 구조화된 Prompt 작성 (Structured Outputs 유도)
+            prompt = f"""
+            너는 이미지에서 데이터를 추출하여 정해진 규칙대로 응답하는 데이터 추출 AI 시스템이다.
+            제공된 이미지(영수증, 물품 사진, 차량 사진 등)를 분석하여 현재 시스템 모드인 [{self.current_mode}] 관리에 적합한 정보를 추출해라.
+
+            출력 양식은 반드시 아래의 형식을 철저히 지키고 다른 설명이나 텍스트는 절대 포함하지 마라.
+            날짜: YYYY-MM-DD 형식 (알 수 없으면 오늘 날짜인 {datetime.now().strftime('%Y-%m-%d')} 사용)
+            내용: 추출한 항목명 또는 차량번호 또는 품목이름 (간결하게 15자 이내)
+            수치: 콤마나 단위가 없는 순수 정수 혹은 실수 숫자 (예: 15000)
+
+            예시 출력:
+            날짜: 2026-05-18
+            내용: 아메리카노
+            수치: 4500
+            """
+
+            # 3. Gemini 2.5 Flash 모델에 멀티모달 요청 생성
+            response = self.ai_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[image_part, prompt]
+            )
+            
+            result_text = response.text.strip()
+            
+            # 4. 결과 파싱 작업
+            parsed_data = {}
+            for line in result_text.split('\n'):
+                if ':' in line:
+                    key, val = line.split(':', 1)
+                    parsed_data[key.strip()] = val.strip()
+
+            # 5. UI 입력창에 값 세팅
+            if "날짜" in parsed_data: self.edit1.setText(parsed_data["날짜"])
+            if "내용" in parsed_data: self.edit2.setText(parsed_data["내용"])
+            if "수치" in parsed_data: self.edit3.setText(parsed_data["수치"])
+
+            QMessageBox.information(self, "완료", f"AI 분석 완료!\n추출된 데이터를 확인하고 기록 버튼을 누르세요.\n\n[추출 결과]\n{result_text}")
+            
+            # 다음 분석을 위해 상태 초기화
+            self.selected_image_path = ""
+            self.lbl_img_status.setText("선택된 사진 없음")
+
+        except Exception as e:
+            QMessageBox.critical(self, "AI 분석 오류", f"Gemini API 호출 중 문제가 발생했습니다:\n{str(e)}")
+        finally:
+            self.btn_run_ai.setText("⚡ AI 이미지 분석 및 자동 입력")
+            self.btn_run_ai.setEnabled(True)
+
+    def save_data(self):
+        v1, v2, v3 = self.edit1.text(), self.edit2.text(), self.edit3.text()
+        if v1 and v2 and v3:
+            try:
+                val = float(v3)
+                self.data[self.current_mode].append((v2, val))
+                self.update_plot()
+                self.edit2.clear(); self.edit3.clear()
+            except ValueError:
+                QMessageBox.warning(self, "에러", "수치는 숫자만 입력하세요.")
+        else:
+            QMessageBox.warning(self, "알림", "모든 칸을 채워주세요.")
+
+    def update_plot(self):
+        self.ax.clear()
+        current_list = self.data[self.current_mode]
+        
+        if not current_list:
+            self.ax.set_title(f"{self.current_mode} 현황 (데이터 없음)")
+            if self.current_mode == "용돈":
+                self.ax.set_ylim(0, 20000)
+                ticks = range(0, 21000, 2000)
+                self.ax.set_yticks(ticks)
+                self.ax.set_yticklabels([f"{x:,}" for x in ticks])
+            self.ax.grid(True, alpha=0.2)
+            self.figure.tight_layout()
+            self.canvas.draw()
+            return
+
+        names = [x[0] for x in current_list]
+        values = [x[1] for x in current_list]
+
+        if self.current_mode == "용돈":
+            self.ax.scatter(range(len(values)), values, color='#2980b9', s=120, zorder=3)
+            self.ax.plot(range(len(values)), values, color='#3498db', linestyle='--', alpha=0.5)
+            self.ax.set_title("용돈 지출 현황 (Max 20,000)")
+            self.ax.set_ylim(0, 20000)
+            ticks = range(0, 21000, 2000)
+            self.ax.set_yticks(ticks)
+            self.ax.set_yticklabels([f"{x:,}" for x in ticks])
+            self.ax.set_xticks(range(len(names)))
+            self.ax.set_xticklabels(names, rotation=15)
+
+        elif self.current_mode == "창고":
+            bars = self.ax.bar(names, values, color='#e67e22', width=0.6)
+            self.ax.bar_label(bars, fmt='%.0f')
+            self.ax.set_title("창고 재고 현황")
+            self.ax.set_xticklabels(names, rotation=15)
+        
+        elif self.current_mode == "차량":
+            self.ax.plot(names, values, marker='o', color='#27ae60', linewidth=2, markersize=8)
+            self.ax.set_title("차량 입출 기록")
+            self.ax.set_xticklabels(names, rotation=15)
+
+        self.ax.grid(True, alpha=0.3)
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+    def export_to_excel(self):
+        if not self.data[self.current_mode]:
+            QMessageBox.warning(self, "알림", "내보낼 데이터가 없습니다.")
+            return
+        try:
+            df = pd.DataFrame(self.data[self.current_mode], columns=['항목/내용', '수치'])
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            file_path = os.path.join(desktop, f"David_{self.current_mode}_데이터.xlsx")
+            df.to_excel(file_path, index=False)
+            QMessageBox.information(self, "성공", f"엑셀 파일이 바탕화면에 저장되었습니다!")
+            os.startfile(desktop)
+        except Exception as e:
+            QMessageBox.critical(self, "에러", f"엑셀 저장 중 오류: {str(e)}")
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = MoneyApp()
+    window.show()
+    sys.exit(app.exec())
