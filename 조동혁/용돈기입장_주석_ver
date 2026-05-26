@@ -1,0 +1,352 @@
+import sys                                          #시스템 연동 
+import os                                           #os연동
+from datetime import datetime                       #datetime 이라는 곳에서 물건 가져오기 
+
+# 1. DLL 및 환경 변수 설정
+os.environ["PATH"] = sys.prefix + os.pathsep + os.environ["PATH"]       #프로그램 실행 시 패스 저장 
+os.environ["QT_API"] = "pyside6"                                        # 파이사이드 6 무조건 사용 해서 
+
+import matplotlib                                   #멧플롯립 실행
+from matplotlib import font_manager, rc             #멧플롯립에서 글껄 관리
+
+# 2. Matplotlib 한글 폰트 설정
+font_path = "C:/Windows/Fonts/malgun.ttf"           # 이 위치에 있는걸 변수로 입력 
+if os.path.exists(font_path):                       #만약 이 변수가 존재한다면 실행 
+    font_name = font_manager.FontProperties(fname=font_path).get_name()     #이 파일을 열어서 확인한 걸 이제 가져와서 사용하겠음 .
+    matplotlib.rc('font', family=font_name)         #이하 작성된느 모든 글씨체 이거로 변경 
+
+matplotlib.rcParams['axes.unicode_minus'] = False   #'-'는 폰트 저장한거 따르지 말고 '-' 그대로 출력할 것 
+matplotlib.use('qtagg')                             #직접 작성하는 창이랑, 멧플롯립으로 출력하는 위젯 두개가 같이 보이도록 할 것 
+
+import matplotlib.pyplot as plt                         #멧플롯립 실행, 이하 PLT로 칭한다. 
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas    #캔버스를 가지고 위젯에 병렬로 존재 가능하게 위에 붙이는거로 바꾸기 
+import pandas as pd                                 #데이터를 표로 다루는 판다스 실행, 이하 PD로 칭한다. 
+
+# 3. Gemini API SDK 임포트 (google-genai)
+try:                                                #오류나더라도 죽지 않게 일단 시도할거야 
+    from google import genai                        #AI 위젯에 집어 넣은거 사용 가능하게 할거야 
+    from google.genai import types                  #구글 에서 만든 제나이 가져올 것이야 
+    HAS_GEMINI = True                               #제미나이 변수를 TRUE로 두겠다.     
+except ImportError:                                 #임포트 에러뜬 경우 
+    HAS_GEMINI = False                              #제미나이 변수를 FALSE로 두고 실행 
+
+from PySide6 import QtCore, QtWidgets, QtGui                                            #파이사이드6에 있는 큐티코어, 큐티 위젯, 큐티 지유아이 가져올게 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,         #거기 안에 있는 이하 툴들을 가져올게
+                             QHBoxLayout, QLineEdit, QPushButton, QLabel, 
+                             QMessageBox, QToolBar, QFileDialog)
+from PySide6.QtGui import QAction                                                       #버튼 눌렀을 때 작동 가능하게 하는 QACTION이라는걸 가져와 사용     
+
+class MoneyApp(QMainWindow):                                                            #큐메인윈도우를 상속받은 클래스를 이하 머니앱이라 칭한다.             
+    def __init__(self):                                                                 #기본값으로 실행하자  
+        super().__init__()                                                              #상속받은걸 기본값으로 실행 
+        self.current_mode = "용돈"
+        self.data = {"용돈": [], "창고": [], "차량": []}                                 #딕셔너리 세칸 지정 용돈, 창고, 차량           
+        self.selected_image_path = "" # 선택된 이미지 경로 저장용                          차후에 내가 지정한 이미지 끌어 올 때 사용                  
+        
+        # Gemini 클라이언트 초기화 (환경변수의 GEMINI_API_KEY를 자동으로 로드)
+        if HAS_GEMINI:                                                                  #제미나이 있는 경우에     
+            try:
+                self.ai_client = genai.Client()                                         #ai클라이언트 가져오기 
+            except Exception:
+                self.ai_client = None                                                   #인터넷 끊기거나, api key 가 가짜여서 안되더라도 빈칸으로 두고 일단은 프로그램 실행, / 제미나이가 없는채로        
+        else:
+            self.ai_client = None                                                       #애초에 없는경우에도 비워두라 
+
+        self.initUI()                                                                   #initUI실행 
+
+    def initUI(self):
+        self.setWindowTitle('David의 멀티 스마트 관리 시스템 3.0 (AI Vision)')            #위젯 타이틀 바 작성
+        self.setGeometry(200, 200, 1100, 750)                                           #위젯 크기 설정 
+
+        # 1. 툴바 설정
+        toolbar = QToolBar("메인 툴바")                                                  #툴바 작성 네모난 칸 세칸짜리를 툴바라고 한다    
+        self.addToolBar(toolbar)
+
+        money_act = QAction("💰 용돈기입장", self)                                       #용돈 기입장이라는 툴바 동작 버튼 하나 만들기    
+        money_act.triggered.connect(lambda: self.switch_mode("용돈"))                    #버튼 눌릴 때 화면이 바뀌게 하는 유령 함수? 
+        toolbar.addAction(money_act)                                                    #컴퓨터상 메모리 되어있는것을 시각화 할 것 
+
+        stock_act = QAction("📦 창고관리", self)                                        #창고관리라는 툴바 작성 이하 동일 
+        stock_act.triggered.connect(lambda: self.switch_mode("창고"))
+        toolbar.addAction(stock_act)
+
+        car_act = QAction("🚗 차량입출", self)                                          #차량 입출이라는 툴바 작성 이하 동일     
+        car_act.triggered.connect(lambda: self.switch_mode("차량"))
+        toolbar.addAction(car_act)
+
+        # 2. 메인 레이아웃 구성
+        central_widget = QWidget()                                                      #도화지 하나 설정 
+        self.setCentralWidget(central_widget)                                           #이 도화지 꽉 차게 설정  
+        main_layout = QHBoxLayout(central_widget)                                       #가로로 작성  
+
+        # --- 왼쪽: 입력 및 AI 영역 ---
+        left_layout = QVBoxLayout()                                                     #큐브이박스 정렬하는 방법 알려주는 것         
+        left_layout.setSpacing(8) 
+        left_layout.setContentsMargins(15, 15, 15, 15)
+
+        self.mode_label = QLabel(f"현재 모드: 【 {self.current_mode} 】")                #글자 설정        
+        self.mode_label.setStyleSheet("font-weight: bold; color: #2e86de; font-size: 16px; margin-bottom: 5px;")
+        
+        # --- [추가] AI 사진 인식 섹션 ---
+        ai_group_label = QLabel("🤖 Gemini AI 사진 인식 입력")                          #변수지정, 메모리 저장 
+        ai_group_label.setStyleSheet("font-weight: bold; color: #8e44ad; font-size: 13px; margin-top: 5px;")
+        
+        self.btn_select_img = QPushButton("📸 이미지 파일 선택...")                     #버튼 생성 
+        self.btn_select_img.clicked.connect(self.select_image)                          #동작 지정 
+        
+        self.lbl_img_status = QLabel("선택된 사진 없음")                                #선택된 사진 없을 경우 동작 설정 회색글자로 선택된 사진 없음 출력 
+        self.lbl_img_status.setStyleSheet("color: gray; font-style: italic;")            
+        
+        self.btn_run_ai = QPushButton("⚡ AI 이미지 분석 및 자동 입력")                 #ai이미지 분석 및 자동 입력 버튼 생성, 글자꼴 지정, 눌리면 이미지 분석되는 절차  
+        self.btn_run_ai.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold;")
+        self.btn_run_ai.clicked.connect(self.analyze_image_with_gemini)
+        
+        # 기존 수동 입력 필드들
+        self.label1 = QLabel("날짜:")                                                           #날짜 입력칸 만들고, 거기에 기본으로 오늘 날짜 들어오게끔 설정 
+        self.edit1 = QLineEdit()
+        self.edit1.setText(datetime.now().strftime("%Y-%m-%d")) # 기본적으로 오늘 날짜 세팅
+        
+        self.label2 = QLabel("내용 (지출처):")                                                  #내용(지출처) 입력칸 만들기 입력창만 생성 
+        self.edit2 = QLineEdit()
+        
+        self.label3 = QLabel("금액 (원):")                                                      #금액 (원) 입력칸 만들기 -껍데기만 만든거 
+        self.edit3 = QLineEdit()
+
+        # 레이아웃에 배치 (AI 섹션을 상단에 배치하여 플로우 유도)
+        left_layout.addWidget(self.mode_label)                                                  #지금까지 만든 버튼 아래 순서대로 세로로 정렬         
+        left_layout.addWidget(ai_group_label)
+        left_layout.addWidget(self.btn_select_img)
+        left_layout.addWidget(self.lbl_img_status)
+        left_layout.addWidget(self.btn_run_ai)
+        
+        # 구분선 역할의 마진
+        left_layout.addSpacing(10)                                                              #지금까지 여백 5픽셀, 지금부터 10픽셀 더해서 총 15픽셀 여백 
+        
+        left_layout.addWidget(self.label1); left_layout.addWidget(self.edit1)                   #ai 이미지 분석 및 자동 입력 여기부터 15픽셀 여백 줄 것 
+        left_layout.addWidget(self.label2); left_layout.addWidget(self.edit2)
+        left_layout.addWidget(self.label3); left_layout.addWidget(self.edit3)
+
+        save_btn = QPushButton('💾 데이터 기록 및 분석')                                        #데이터 기록 및 분석 버튼 생성, 양식 지정 
+        save_btn.setFixedHeight(40)
+        save_btn.setStyleSheet("background-color: #34495e; color: white; font-weight: bold;")
+        save_btn.clicked.connect(self.save_data)
+        left_layout.addWidget(save_btn)                                                        #버튼 누르면 저장되는거에요 
+
+        export_btn = QPushButton('📊 엑셀로 내보내기 (Export)')                                 #엑셀로 내보내기 버튼 만들기, 버튼 양식 정하기 
+        export_btn.setFixedHeight(40)
+        export_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
+        export_btn.clicked.connect(self.export_to_excel)
+        left_layout.addWidget(export_btn)                                                       #이하 코드 실행 
+        
+        left_layout.addStretch()                                                                #여백 유연하게 만들어주기 
+
+        # --- 오른쪽: 그래프 영역 ---
+        self.figure, self.ax = plt.subplots()                                           #멧플롯립 도화지, 축 설정 
+        self.canvas = FigureCanvas(self.figure)                                         #파이선 그래프 qt용으로 변환 
+        
+        main_layout.addLayout(left_layout, stretch=1)                                   #가로 세로 비율 1: 2.5
+        main_layout.addWidget(self.canvas, stretch=2.5)
+
+        self.update_plot()                                                              #프로그램 켤때마다 상시로 갱신 
+
+    def switch_mode(self, mode):                                                        #모드 변경 함수 현재 어떤 모드인지 알려주기        
+        self.current_mode = mode
+        self.mode_label.setText(f"현재 모드: 【 {mode} 】")
+        
+        if mode == "용돈":                                                              #용돈 모드일때 내용, 금액으로 라벨 변경     
+            self.label2.setText("내용 (지출처):")
+            self.label3.setText("금액 (원):")
+        elif mode == "창고":                                                            #창고일때 품목명, 입고수량으로 
+            self.label2.setText("품목명:")
+            self.label3.setText("입고 수량:")
+        elif mode == "차량":                                                            #차량일 때 차량 번호, 입차 시각으로 
+            self.label2.setText("차량번호:")
+            self.label3.setText("입차 시각 (숫자):")
+        
+        self.edit2.clear()                                                             #바뀔때마다 입력창 지워주고, 그림도 다시 그려줘
+        self.edit3.clear()
+        self.update_plot()
+
+    # [AI 기능] 이미지 파일 열기 다이얼로그
+    def select_image(self):                                                             #이미지 불러 오는 함수
+        file_filter = "이미지 파일 (*.png *.jpg *.jpeg *.bmp)"                           #걸러낼 확장자 명 지정 
+        file_path, _ = QFileDialog.getOpenFileName(self, "분석할 이미지 선택", "", file_filter) #파일 탐색기 창 열기 
+        if file_path:                                                                   #파일 경로 저장 
+            self.selected_image_path = file_path                                         
+            # 파일명만 추출해서 라벨에 표시
+            self.lbl_img_status.setText(os.path.basename(file_path))                    #긴 주소 말고 파일 이름만 가져오기 
+
+    # [AI 기능] Gemini 2.5 Flash 모델 연동 비전 분석
+    def analyze_image_with_gemini(self):
+        if not HAS_GEMINI:                                              #제미나이 제대로 깔려 있어? 아니면 나와 
+            QMessageBox.critical(self, "라이브러리 누락", "google-genai 라이브러리가 설치되지 않았습니다.\npip install google-genai 를 실행하세요.")
+            return
+        
+        if not self.selected_image_path:                                #이미지 경로 제대로 잡혀있어? 아니면 나와 
+            QMessageBox.warning(self, "알림", "먼저 분석할 이미지 파일을 선택해 주세요.")
+            return
+
+        if not self.ai_client:                                          #API키 제대로 잡혀있어? 아니면 나와 
+            QMessageBox.critical(self, "인증 에러", "Gemini API 키가 설정되지 않았거나 클라이언트 생성에 실패했습니다.\n환경변수(GEMINI_API_KEY)를 확인하세요.")
+            return
+
+        self.btn_run_ai.setText("⏳ AI 분석 중... 잠시만 기다려주세요")             #분석중일때 AII분석중, 잠시만 기다려주세요 하고, 버튼 안눌리게 변경 
+        self.btn_run_ai.setEnabled(False)
+        QApplication.processEvents() # UI가 멈추지 않도록 강제 리프레시             #연산 전에 화면 강제로 새로고침해 멈춤 현상 방지 
+
+        try:
+            # 1. 파일 데이터 로드 및 미디어타입 매핑
+            with open(self.selected_image_path, "rb") as f:                     #사진 바이너리로 가져오기 
+                image_bytes = f.read()
+            
+            ext = os.path.splitext(self.selected_image_path)[-1].lower()        #확장자 추출 후 소문자 변환 
+            mime_type = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"    #제미나이가 인식할 이미지 종류 라벨 설정 
+            
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)       # 바이트 데이터와 라벨을 묶어 AI 전용 전송 객체로 최종 조립
+
+            # 2. 현재 모드에 맞춘 구조화된 Prompt 작성 (Structured Outputs 유도)
+            prompt = f"""
+            너는 이미지에서 데이터를 추출하여 정해진 규칙대로 응답하는 데이터 추출 AI 시스템이다.
+            제공된 이미지(영수증, 물품 사진, 차량 사진 등)를 분석하여 현재 시스템 모드인 [{self.current_mode}] 관리에 적합한 정보를 추출해라.
+
+            출력 양식은 반드시 아래의 형식을 철저히 지키고 다른 설명이나 텍스트는 절대 포함하지 마라.
+            날짜: YYYY-MM-DD 형식 (알 수 없으면 오늘 날짜인 {datetime.now().strftime('%Y-%m-%d')} 사용)
+            내용: 추출한 항목명 또는 차량번호 또는 품목이름 (간결하게 15자 이내)
+            수치: 콤마나 단위가 없는 순수 정수 혹은 실수 숫자 (예: 15000)
+
+            예시 출력:
+            날짜: 2026-05-18
+            내용: 아메리카노
+            수치: 4500
+            """
+
+            # 3. Gemini 2.5 Flash 모델에 멀티모달 요청 생성
+            response = self.ai_client.models.generate_content(                      
+                model='gemini-2.5-flash',                                   #구글 이미지 인식 엔진 지정 
+                contents=[image_part, prompt]                               #분석할 사진, 미션 명령어 묶어서 전송 
+            )                                                               # AI가 분석해서 뱉은 결과(return)를 response 변수에 저장
+            
+            result_text = response.text.strip()                             # AI 답변에서 순수 글자만 추출(.text)하고 앞뒤 불필요한 공백을 제거(.strip)하여 변수에 저장
+            
+            # 4. 결과 파싱 작업
+            parsed_data = {}                                            # 파싱한 데이터를 저장할 빈 딕셔너리 생성
+            for line in result_text.split('\n'):                        # AI 답변을 줄바꿈(\n) 기준으로 쪼개어 한 줄씩 분석
+                if ':' in line:                                         # 해당 줄에 콜론(:) 구분자가 포함되어 있다면
+                    key, val = line.split(':', 1)                       # 콜론을 기준으로 왼쪽(Key)과 오른쪽(Value) 딱 반으로 쪼갬
+                    parsed_data[key.strip()] = val.strip()               # 앞뒤 공백을 청소(.strip)한 뒤 딕셔너리에 최종 저장
+
+            # 5. UI 입력창에 값 세팅
+            if "날짜" in parsed_data: self.edit1.setText(parsed_data["날짜"])           #보관함에 날짜 데이터 있으면 첫번째 입력창에 자동 입력 
+            if "내용" in parsed_data: self.edit2.setText(parsed_data["내용"])           #내용 있으면 두번째 입력창 입력 
+            if "수치" in parsed_data: self.edit3.setText(parsed_data["수치"])           #수치 있으면 두번째 입력창 입력 
+
+            #성공 알림 및 추출 데이터 검수용 팝업창 표시 
+            QMessageBox.information(self, "완료", f"AI 분석 완료!\n추출된 데이터를 확인하고 기록 버튼을 누르세요.\n\n[추출 결과]\n{result_text}")
+                            
+            # 다음 분석을 위해 상태 초기화
+            self.selected_image_path = ""
+            self.lbl_img_status.setText("선택된 사진 없음")
+
+        except Exception as e:                                                          #에러 처리 
+            QMessageBox.critical(self, "AI 분석 오류", f"Gemini API 호출 중 문제가 발생했습니다:\n{str(e)}")        # 에러 발생 시 프로그램 튕김을 방지하고 빨간색 에러 팝업창으로 원인 표시
+        finally:                                                                       # 성공하든 에러가 나든 '무조건' 마지막에 실행되는 구역
+            self.btn_run_ai.setText("⚡ AI 이미지 분석 및 자동 입력")                   #로딩중인걸 초기화 원래대로 리셋 
+            self.btn_run_ai.setEnabled(True)                                           #체크 불가능한 버튼을 체크 가능하도록 변경 
+
+    def save_data(self):
+        v1, v2, v3 = self.edit1.text(), self.edit2.text(), self.edit3.text() # 입력창 3형제의 텍스트(날짜, 내용, 수치)를 각각 읽어옴
+        if v1 and v2 and v3:                                            # 세 칸 모두 빈틈없이 채워져 있다면 진행
+            try:
+                val = float(v3)                                         # 그래프 연산을 위해 문자열 수치를 숫자(실수)형으로 변환 시도
+                self.data[self.current_mode].append((v2, val))          # 현재 모드(용돈/창고) 데이터 리스트에 (내용, 숫자) 추가
+                self.update_plot()                                      # 데이터가 바뀌었으므로 Matplotlib 그래프 실시간 갱신
+                self.edit2.clear(); self.edit3.clear()                  # 다음 입력을 위해 내용창과 수치창을 깨끗이 비우기
+            except ValueError:                                          # 만약 수치 칸에 숫자가 아닌 문자가 들어와 에러가 나면
+                QMessageBox.warning(self, "에러", "수치는 숫자만 입력하세요.") # 경고창을 띄우고 프로그램 튕김 방지
+        else:
+            QMessageBox.warning(self, "알림", "모든 칸을 채워주세요.")         # 빈 칸이 하나라도 있으면 경고 표시
+
+    def update_plot(self):
+        self.ax.clear()                                                 # 새로운 그래프를 그리기 위해 기존 칠판을 깨끗이 지움
+        current_list = self.data[self.current_mode]                     # 현재 모드(용돈/창고)에 누적된 데이터 리스트 가져오기
+        
+        if not current_list:                                            # 만약 저장된 데이터가 하나도 없다면 (초기 상태)
+            self.ax.set_title(f"{self.current_mode} 현황 (데이터 없음)")     # 차트 제목에 데이터 없음 표시
+            if self.current_mode == "용돈":
+                self.ax.set_ylim(0, 20000)                              # Y축 범위 기본 세팅 (0 ~ 20,000원)
+                ticks = range(0, 21000, 2000)                           # 2,000 단위로 눈금 생성
+                self.ax.set_yticks(ticks)
+                self.ax.set_yticklabels([f"{x:,}" for x in ticks])       # 눈금에 천 단위 콤마(,) 포맷팅 적용
+            self.ax.grid(True, alpha=0.2)                               # 은은한 투명도(0.2)로 배경 가이드 격자선 그리기
+            self.figure.tight_layout()                                  # 여백 자동 조절
+            self.canvas.draw()                                          # 빈 가이드 화면을 캔버스에 최종 반영
+            return                                                      # 🚨 데이터가 없으므로 하단 그리기 로직을 패스하고 즉시 함수 탈출
+            
+        names = [x[0] for x in current_list]                            # 그래프 X축에 쓸 '내용(이름)'만 리스트로 쏙 솎아내기
+        values = [x[1] for x in current_list]                           # 그래프 막대 높이가 될 '수치(숫자)'만 리스트로 쏙 솎아내기
+
+        if self.current_mode == "용돈":
+            # 1. 지출 지점에 세련된 딥블루 색상의 큰 점(Size 120) 찍기 (zorder=3으로 맨 위에 표시)
+            self.ax.scatter(range(len(values)), values, color='#2980b9', s=120, zorder=3)
+            # 2. 점들을 잇는 은은한(투명도 0.5) 하늘색 점선(--) 그래프 그리기
+            self.ax.plot(range(len(values)), values, color='#3498db', linestyle='--', alpha=0.5)
+            
+            # 3. Y축 범위 설정 및 천 단위 콤마(,) 눈금 표시 (0 ~ 20,000원까지 2,000 단위)
+            self.ax.set_title("용돈 지출 현황 (Max 20,000)")
+            self.ax.set_ylim(0, 20000)
+            ticks = range(0, 21000, 2000)
+            self.ax.set_yticks(ticks)
+            self.ax.set_yticklabels([f"{x:,}" for x in ticks])
+            
+            # 4. X축에 지출처(상호명)를 표시하고, 글자 겹침 방지를 위해 15도 회전 세팅
+            self.ax.set_xticks(range(len(names)))
+            self.ax.set_xticklabels(names, rotation=15)
+
+        elif self.current_mode == "창고":                                # 현재 모드가 '창고' 모드라면 진행
+            # 1. 물품명(names)과 재고수량(values)으로 세련된 오렌지색(#e67e22) 막대그래프 그리기 (두께 0.6)
+            bars = self.ax.bar(names, values, color='#e67e22', width=0.6)
+            
+            # 2. 막대 기둥 바로 위에 실제 재고 수량을 소수점 없는 정수 형태('%.0f')로 딱 박아주기
+            self.ax.bar_label(bars, fmt='%.0f')
+            
+            # 3. 차트 제목을 변경하고, X축 물품 이름들이 서로 겹치지 않게 15도 비스듬히 회전 세팅
+            self.ax.set_title("창고 재고 현황")
+            self.ax.set_xticklabels(names, rotation=15)
+        
+        elif self.current_mode == "차량":                                # 현재 모드가 '차량' 모드라면 진행
+            # 1. 신뢰감을 주는 초록색(#27ae60) 실선과 큼직한 동그라미 점(Size 8)으로 차량 로그 그래프 그리기
+            self.ax.plot(names, values, marker='o', color='#27ae60', linewidth=2, markersize=8)
+            self.ax.set_title("차량 입출 기록")
+            self.ax.set_xticklabels(names, rotation=15)
+
+        # [최종 공통 마감 구역] 모든 모드가 그리기 완료 후 거쳐가는 구역
+        self.ax.grid(True, alpha=0.3)                                   # 투명도 0.3의 은은한 가이드 배경 격자선 그리기
+        self.figure.tight_layout()                                      # X축 글자 회전 등으로 인한 여백 잘림 현상 자동 방지
+        self.canvas.draw()                                              # 메모리에 완성된 그래프를 유저 화면(Canvas)에 실시간 최종 송출
+
+    def export_to_excel(self):
+        if not self.data[self.current_mode]:                            # 현재 모드에 누적된 데이터가 하나도 없다면
+            QMessageBox.warning(self, "알림", "내보낼 데이터가 없습니다.")     # 경고창 표시 후
+            return                                                      # 🚨 파일 저장 로직을 실행하지 않고 즉시 함수 탈출
+        try:
+            # 1. 누적 데이터 리스트를 판다스 데이터프레임(엑셀 표 형태)으로 변환
+            df = pd.DataFrame(self.data[self.current_mode], columns=['항목/내용', '수치'])
+            
+            # 2. 유저 시스템의 바탕화면(Desktop) 경로를 자동으로 계산하여 안전한 파일 주소 생성
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            file_path = os.path.join(desktop, f"David_{self.current_mode}_데이터.xlsx")
+            
+            # 3. 엑셀 파일로 저장 (좌측 인덱스 번호 열은 제외하고 저장)
+            df.to_excel(file_path, index=False)
+            QMessageBox.information(self, "성공", f"엑셀 파일이 바탕화면에 저장되었습니다!")
+            
+            # 4. 저장 완료 후 유저가 바로 확인할 수 있도록 바탕화면 폴더 탐색기를 자동으로 열어줌
+            os.startfile(desktop)
+        except Exception as e:                                          # 파일이 열려있거나 권한 문제 등으로 에러 발생 시
+            QMessageBox.critical(self, "에러", f"엑셀 저장 중 오류: {str(e)}") # 프로그램 튕김을 막고 에러 메시지 팝업 출력
+
+if __name__ == '__main__':                                          #종료 
+    app = QApplication(sys.argv)
+    window = MoneyApp()
+    window.show()
+    sys.exit(app.exec())
