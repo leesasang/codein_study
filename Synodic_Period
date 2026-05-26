@@ -1,0 +1,122 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyMyIiPiurzFpXb6BthqNDQx",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/leesasang/codein_study/blob/main/Synodic_Period\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 회합주기로 선택할 수 있는 행성을 제시하기 위해\n",
+        "# 판다스라는 라이브러리를 삽입\n",
+        "import pandas as pd\n",
+        "\n",
+        "# 회합 주기 계산하는 함수 만듦.\n",
+        "def Planet_alignment():\n",
+        "    #딕셔너리로 저장\n",
+        "    planet = {\n",
+        "        'Mercury': 0.24,\n",
+        "        'Venus': 0.62,\n",
+        "        'Earth': 1.00,\n",
+        "        'Mars': 1.88,\n",
+        "        'Jupiter': 11.86,\n",
+        "        'Saturn': 29.46,\n",
+        "        'Uranus': 84.01,\n",
+        "        'Neptune': 164.80\n",
+        "    }\n",
+        "    # 판다스를 이용하여 표 생성\n",
+        "    # 딕셔너리에는 key와 그와 대응되는 value가 있는데\n",
+        "    # 정렬을 위해 '행성'과 '공전주기'에 각각 key와 value 대입함.\n",
+        "    df = pd.DataFrame({\n",
+        "        '행성': list(planet.keys()),\n",
+        "        '공전주기(년)': list(planet.values())\n",
+        "    })\n",
+        "\n",
+        "    print(df)\n",
+        "    while True: # 무한반복\n",
+        "        planet1 = input('select planet1 >>> ') # 사용자가 행성 입력\n",
+        "        planet2 = input('select planet2 >>> ')\n",
+        "        # 오타가 났을 경우 아래의 메세지를 반환\n",
+        "        if planet1 not in planet or planet2 not in planet:\n",
+        "            # 사용자가 행성 이름을 잘못 입력하면 아래의 문자를 출력하고 다시 입력한다.\n",
+        "            print('Wrong name. Try again')\n",
+        "            # input('select planet1 >>> ')\n",
+        "            # input('select planet2 >>> ')\n",
+        "        else:\n",
+        "            P1 = planet[planet1]\n",
+        "            P2 = planet[planet2]\n",
+        "            # abs는 절댓값을 나타내는 함수이다.\n",
+        "            S = 1 / abs((1 / P1) - (1 / P2))\n",
+        "            # round : 소수점 둘째 자리까지 반올림 계산\n",
+        "            return round(S,2)\n",
+        "            break\n",
+        "\n",
+        "# result에 함수값 대입(?)\n",
+        "result = Planet_alignment()\n",
+        "print(result)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "e-tpikh_ZFPz",
+        "outputId": "56bf7e92-ddfe-4e84-cad7-cc4d4c27a86c"
+      },
+      "execution_count": 38,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "        행성  공전주기(년)\n",
+            "0  Mercury     0.24\n",
+            "1    Venus     0.62\n",
+            "2    Earth     1.00\n",
+            "3     Mars     1.88\n",
+            "4  Jupiter    11.86\n",
+            "5   Saturn    29.46\n",
+            "6   Uranus    84.01\n",
+            "7  Neptune   164.80\n",
+            "select planet1 >>> mee\n",
+            "select planet2 >>> drf\n",
+            "Wrong name. Try again\n",
+            "select planet1 >>> Mercury\n",
+            "select planet2 >>> Saturn\n",
+            "0.24\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "MKtUpA-coWC5"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
